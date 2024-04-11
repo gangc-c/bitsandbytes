@@ -7,10 +7,11 @@
 #include <kernels.cuh>
 #include <cub/device/device_scan.cuh>
 #include <limits>
-#include <BinSearch.h>
+// #include <BinSearch.h>
 #include <cassert>
-#include <common.h>
+// #include <common.h>
 
+namespace BinSearch {}
 
 using namespace BinSearch;
 using std::cout;
@@ -87,15 +88,6 @@ template<typename T, int DATA_TYPE> void dequantizeBlockwise(float *code, unsign
 
   CUDA_CHECK_RETURN(cudaPeekAtLastError());
 }
-
-
-//void matmul4bite(half *A, unsigned char *B, half*out, int lda, int ldb, int rowsA, int colsA, int colsB)
-//{
-//	int num_blocks = (colsB+32-1)/32;
-//	kMatmul_inference_4bit<NF4, half, half, half><<<num_blocks, 256>>>(A, B, out, lda, ldb, rowsA, colsA, colsB);
-//  CUDA_CHECK_RETURN(cudaPeekAtLastError());
-//}
-
 
 template<typename T, int OPTIMIZER> void optimizer32bit(T* g, T* p,
                 float* state1, float* state2, float *unorm, float max_unorm, float param_norm,
@@ -659,32 +651,6 @@ template <typename T, int BITS> void spmm_coo_very_sparse_naive(int *max_count, 
   CUDA_CHECK_RETURN(cudaPeekAtLastError());
 }
 
-
-template <int FORMAT> void extractOutliers(char * A, int *idx, char *out, int idx_size, int rows, int cols)
-{
-  int threads = 256;
-  // we load 128 column values per warp
-  int tiledCols = tiledCols = fill_up_to_nearest_multiple(cols, 32);
-  int tiledRows = 0;
-
-	int num_blocks = idx_size;
-
-  if(FORMAT == COL_TURING)
-  {
-      tiledRows = fill_up_to_nearest_multiple(rows, 8);
-  }
-  else if(FORMAT == COL_AMPERE)
-  {
-      tiledRows = fill_up_to_nearest_multiple(rows, 32);
-	}
-
-  kExtractOutliers<FORMAT><<<num_blocks, threads>>>(A, idx, out, idx_size, rows, cols, tiledRows, tiledCols);
-  CUDA_CHECK_RETURN(cudaPeekAtLastError());
-}
-
-
-
-
 template <typename T> void gemm_host(int m, int n, int k, T * A,  T* B,  T * out,  int lda, int ldb, int ldc, int bits)
 {
 
@@ -713,16 +679,16 @@ template <typename T> void gemm_host(int m, int n, int k, T * A,  T* B,  T * out
 template <typename T> void gemm_4bit_inference(int m, int n, int k, T * A,  unsigned char* B,  float *absmax, T * out,  int lda, int ldb, int ldc, int blocksize)
 {
 
-	int num_blocks = (m+31)/32;
+        int num_blocks = (m+31)/32;
 
-	//cout << num_blocks << endl;
-	//cout << lda << endl;
-	//cout << ldb << endl;
-	//cout << ldc << endl;
+        //cout << num_blocks << endl;
+        //cout << lda << endl;
+        //cout << ldb << endl;
+        //cout << ldc << endl;
 
-	//cout << m << endl;
-	//cout << n << endl;
-	//cout << k << endl;
+        //cout << m << endl;
+        //cout << n << endl;
+        //cout << k << endl;
   kgemm_4bit_inference<T, 96><<< num_blocks, 96, 0, 0 >>>(m,  n,  k, A,  B, absmax, out, lda, ldb, ldc, blocksize);
   //kgemm_4bit_inference<T, 256><<< num_blocks, 256, 0, 0 >>>(m,  n,  k, A,  B, absmax, out, lda, ldb, ldc, blocksize);
   //kgemm_4bit_inference<T, 160><<< num_blocks, 160, 0, 0 >>>(m,  n,  k, A,  B, absmax, out, lda, ldb, ldc, blocksize);
@@ -732,9 +698,32 @@ template <typename T> void gemm_4bit_inference(int m, int n, int k, T * A,  unsi
 template <typename T, int BITS> void gemm_4bit_inference_naive(int m, int n, int k, T * A,  unsigned char* B,  float *absmax, float *datatype, T * out,  int lda, int ldb, int ldc, int blocksize)
 {
 
-	int num_blocks = (m+3)/4;
+        int num_blocks = (m+3)/4;
 
   kgemm_4bit_inference_naive<T, 128, BITS><<< num_blocks, 128, 0, 0 >>>(m,  n,  k, A,  B, absmax, datatype, out, lda, ldb, ldc, blocksize);
+  CUDA_CHECK_RETURN(cudaPeekAtLastError());
+}
+
+
+template <int FORMAT> void extractOutliers(char * A, int *idx, char *out, int idx_size, int rows, int cols)
+{
+  int threads = 256;
+  // we load 128 column values per warp
+  int tiledCols = tiledCols = fill_up_to_nearest_multiple(cols, 32);
+  int tiledRows = 0;
+
+	int num_blocks = idx_size;
+
+  if(FORMAT == COL_TURING)
+  {
+      tiledRows = fill_up_to_nearest_multiple(rows, 8);
+  }
+  else if(FORMAT == COL_AMPERE)
+  {
+      tiledRows = fill_up_to_nearest_multiple(rows, 32);
+	}
+
+  kExtractOutliers<FORMAT><<<num_blocks, threads>>>(A, idx, out, idx_size, rows, cols, tiledRows, tiledCols);
   CUDA_CHECK_RETURN(cudaPeekAtLastError());
 }
 
@@ -762,8 +751,8 @@ template void gemm_4bit_inference_naive<half, 16>(int m, int n, int k, half * A,
 template void gemm_4bit_inference_naive<__nv_bfloat16, 16>(int m, int n, int k, __nv_bfloat16 * A,  unsigned char* B,  float *absmax, float *datatype, __nv_bfloat16 * out,  int lda, int ldb, int ldc, int blocksize);
 template void gemm_4bit_inference_naive<float, 32>(int m, int n, int k, float * A,  unsigned char* B,  float *absmax, float *datatype, float * out,  int lda, int ldb, int ldc, int blocksize);
 
-//template void gemm_host<float>(int m, int n, int k, float * A,  float* B,  float * out,  int lda, int ldb, int ldc, int bits);
 template void gemm_host<half>(int m, int n, int k, half * A,  half* B,  half * out,  int lda, int ldb, int ldc, int bits);
+
 template void extractOutliers<COL_TURING>(char * A, int *idx, char *out, int idx_size, int rows, int cols);
 template void extractOutliers<COL_AMPERE>(char * A, int *idx, char *out, int idx_size, int rows, int cols);
 
@@ -864,8 +853,7 @@ MAKE_optimizerStatic8bitBlockwise(float, LION);
 MAKE_optimizerStatic8bitBlockwise(__nv_bfloat16, LION);
 MAKE_optimizerStatic8bitBlockwise(half, ADAGRAD);
 MAKE_optimizerStatic8bitBlockwise(float, ADAGRAD);
+MAKE_optimizerStatic8bitBlockwise(__nv_bfloat16, ADAM);
 
 template void percentileClipping(float * g, float *gnorm_vec, int step, const int n);
 template void percentileClipping(half * g, float *gnorm_vec, int step, const int n);
-
-MAKE_optimizerStatic8bitBlockwise(__nv_bfloat16, ADAM);
